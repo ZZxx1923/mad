@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f17" />
+  <title>التحكم بالجهاز</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>" />
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card: #141a26;
+      --card-2: #1b2433;
+      --line: #263142;
+      --text: #e7edf5;
+      --muted: #8a97a8;
+      --accent: #3b82f6;
+      --green: #22c55e;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Tajawal", Roboto, system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #16203200, #0b0f17 60%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .wrap { width: 100%; max-width: 460px; margin: 0 auto; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 22px 4px 14px;
+    }
+    .title { font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+    .title small { display:block; color: var(--muted); font-weight: 500; font-size: 12px; margin-top: 2px; }
+
+    .status {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--line);
+      padding: 8px 12px; border-radius: 999px; font-size: 13px; color: var(--muted);
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+    .dot.on { background: var(--green); box-shadow: 0 0 12px 1px rgba(34,197,94,.6); }
+    .dot.off { background: var(--red); }
+
+    .grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;
+    }
+    .btn {
+      appearance: none; border: 1px solid var(--line); background: var(--card);
+      color: var(--text); border-radius: var(--radius); padding: 20px 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      font-size: 16px; font-weight: 600; cursor: pointer; transition: transform .08s ease, background .15s ease, border-color .15s ease;
+      user-select: none;
+    }
+    .btn:active { transform: scale(.97); background: var(--card-2); }
+    .btn .ico { font-size: 30px; line-height: 1; }
+    .btn.span2 { grid-column: span 2; flex-direction: row; justify-content: center; padding: 16px; }
+    .btn.danger { border-color: #4a2330; }
+    .btn.danger .ico { filter: drop-shadow(0 0 6px rgba(239,68,68,.35)); }
+    .btn.warn { border-color: #4a3a1a; }
+    .btn[disabled] { opacity: .45; pointer-events: none; }
+
+    .hint { color: var(--muted); font-size: 12.5px; text-align: center; margin: 18px 6px 6px; line-height: 1.7; }
+
+    /* password gate */
+    .gate {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 22px; margin-top: 30px;
+    }
+    .gate h2 { margin: 0 0 6px; font-size: 18px; }
+    .gate p { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+    input[type=password], input[type=text] {
+      width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+      border-radius: 12px; padding: 14px; font-size: 16px; outline: none;
+    }
+    input:focus { border-color: var(--accent); }
+    .primary {
+      width: 100%; margin-top: 12px; background: var(--accent); border: none; color: white;
+      border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 700; cursor: pointer;
+    }
+    .primary:active { opacity: .9; }
+    .link { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; margin-top: 10px; }
+
+    /* toast */
+    #toast {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 50;
+      background: #0f1623; border: 1px solid var(--line); color: var(--text);
+      padding: 13px 18px; border-radius: 14px; font-size: 14px; max-width: 90vw; text-align: center;
+      opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease;
+      box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.ok { border-color: #1f5132; }
+    #toast.err { border-color: #5a2630; }
+
+    .hidden { display: none !important; }
+    footer { color: #4a5668; font-size: 11px; text-align: center; margin: 26px 0 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">التحكم بالجهاز<small>تحكّم عن بُعد من جوالك</small></div>
+      <div class="status" id="statusBox">
+        <span class="dot" id="dot"></span>
+        <span id="statusText">جارِ الفحص…</span>
+      </div>
+    </header>
+
+    <!-- Password gate -->
+    <section id="gate" class="gate hidden">
+      <h2>الدخول</h2>
+      <p>اكتب كلمة السر اللي ضبطتها في إعدادات Vercel (<code>UI_PASSWORD</code>).</p>
+      <input id="pwInput" type="password" placeholder="كلمة السر" autocomplete="current-password" />
+      <button class="primary" id="loginBtn">دخول</button>
+    </section>
+
+    <!-- Control panel -->
+    <section id="panel" class="hidden">
+      <div class="grid">
+        <button class="btn danger" data-action="shutdown" data-confirm="1">
+          <span class="ico">⏻</span><span>إيقاف التشغيل</span>
+        </button>
+        <button class="btn warn" data-action="restart" data-confirm="1">
+          <span class="ico">🔄</span><span>إعادة تشغيل</span>
+        </button>
+        <button class="btn" data-action="sleep">
+          <span class="ico">🌙</span><span>سكون (Sleep)</span>
+        </button>
+        <button class="btn" data-action="lock">
+          <span class="ico">🔒</span><span>قفل الشاشة</span>
+        </button>
+        <button class="btn" data-action="logoff" data-confirm="1">
+          <span class="ico">🚪</span><span>تسجيل خروج</span>
+        </button>
+        <button class="btn" data-action="wake">
+          <span class="ico">⚡</span><span>تشغيل (Wake)</span>
+        </button>
+        <button class="btn span2" data-action="cancel">
+          <span class="ico">✖️</span><span>إلغاء أمر الإيقاف</span>
+        </button>
+      </div>
+      <p class="hint">
+        زر «تشغيل (Wake)» يرسل إشارة Wake-on-LAN — يشتغل فقط إذا كان عندك جهاز ثاني دايم شغّال على نفس الشبكة
+        (راجع الشرح في ملف README). باقي الأوامر تنفّذ مباشرة على الجهاز.
+      </p>
+      <button class="link" id="logoutBtn">تغيير كلمة السر / خروج</button>
+    </section>
+
+    <footer>Remote PC Control • تحكّم بجهازك أنت فقط</footer>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    const PW_KEY = "rpc_ui_password";
+    const $ = (s) => document.querySelector(s);
+    let pollTimer = null;
+
+    function getPw() { try { return localStorage.getItem(PW_KEY) || ""; } catch { return ""; } }
+    function setPw(v) { try { localStorage.setItem(PW_KEY, v); } catch {} }
+    function clearPw() { try { localStorage.removeItem(PW_KEY); } catch {} }
+
+    function toast(msg, kind) {
+      const t = $("#toast");
+      t.textContent = msg;
+      t.className = "show " + (kind || "");
+      clearTimeout(t._h);
+      t._h = setTimeout(() => (t.className = t.className.replace("show", "").trim()), 3200);
+    }
+
+    function showPanel() { $("#gate").classList.add("hidden"); $("#panel").classList.remove("hidden"); }
+    function showGate() { $("#panel").classList.add("hidden"); $("#gate").classList.remove("hidden"); $("#pwInput").focus(); }
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({ "x-ui-password": getPw() }, opts.headers || {});
+      if (opts.body) headers["Content-Type"] = "application/json";
+      const res = await fetch(path, { method: opts.method || "GET", headers, body: opts.body });
+      if (res.status === 401) { clearPw(); showGate(); throw new Error("unauthorized"); }
+      return res.json();
+    }
+
+    const ACTION_LABEL = {
+      shutdown: "إيقاف التشغيل", restart: "إعادة التشغيل", sleep: "السكون",
+      lock: "قفل الشاشة", logoff: "تسجيل الخروج", cancel: "إلغاء الإيقاف", wake: "التشغيل",
+    };
+
+    async function updateStatus(resultId) {
+      try {
+        const q = resultId ? ("?id=" + encodeURIComponent(resultId)) : "";
+        const s = await api("/api/status" + q);
+        const dot = $("#dot"), txt = $("#statusText");
+        if (s.online) {
+          dot.className = "dot on";
+          txt.textContent = s.heartbeat?.hostname ? ("متصل • " + s.heartbeat.hostname) : "متصل";
+        } else {
+          dot.className = "dot off";
+          txt.textContent = "غير متصل";
+        }
+        if (resultId && s.result) {
+          if (s.result.status === "error") toast("فشل التنفيذ: " + (s.result.message || ""), "err");
+          else if (s.result.status === "done") toast("تم التنفيذ ✓", "ok");
+        }
+        return s;
+      } catch (e) { /* handled in api() */ }
+    }
+
+    async function send(action) {
+      try {
+        const r = await api("/api/command", { method: "POST", body: JSON.stringify({ action }) });
+        if (r.ok) {
+          toast("أُرسل الأمر: " + (ACTION_LABEL[action] || action), "ok");
+          // check the result a few times
+          let tries = 0;
+          const iv = setInterval(async () => {
+            tries++;
+            await updateStatus(r.id);
+            if (tries >= 6) clearInterval(iv);
+          }, 1500);
+        } else {
+          toast("تعذّر الإرسال", "err");
+        }
+      } catch (e) {
+        if (String(e.message) !== "unauthorized") toast("خطأ في الاتصال", "err");
+      }
+    }
+
+    // wire buttons
+    document.querySelectorAll(".btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const action = b.dataset.action;
+        if (b.dataset.confirm) {
+          if (!confirm("متأكد من: " + (ACTION_LABEL[action] || action) + "؟")) return;
+        }
+        send(action);
+      });
+    });
+
+    $("#loginBtn").addEventListener("click", async () => {
+      const v = $("#pwInput").value.trim();
+      if (!v) return;
+      setPw(v);
+      const s = await updateStatus();
+      if (s) { showPanel(); startPolling(); } // 401 would have reopened the gate
+    });
+    $("#pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#loginBtn").click(); });
+
+    $("#logoutBtn").addEventListener("click", () => { clearPw(); stopPolling(); showGate(); });
+
+    function startPolling() {
+      stopPolling();
+      updateStatus();
+      pollTimer = setInterval(updateStatus, 4000);
+    }
+    function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
+    // boot
+    if (getPw()) {
+      showPanel();
+      startPolling();
+      updateStatus();
+    } else {
+      showGate();
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && getPw()) startPolling(); else stopPolling();
+    });
+  </script>
+</body>
+</html>

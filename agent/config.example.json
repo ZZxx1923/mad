@@ -1,0 +1,8 @@
+{
+  "server_url": "https://YOUR-APP.vercel.app",
+  "agent_token": "نفس-القيمة-المضبوطة-في-Vercel-باسم-AGENT_TOKEN",
+  "poll_interval": 2,
+  "heartbeat_interval": 15,
+  "wol_mac": "AA:BB:CC:DD:EE:FF",
+  "wol_broadcast": "255.255.255.255"
+}

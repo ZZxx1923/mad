@@ -1,0 +1,20 @@
+# خدمة systemd للينكس (تشغيل تلقائي عند الإقلاع).
+# 1) عدّل المسار واسم المستخدم بالأسفل.
+# 2) انسخه إلى:  /etc/systemd/system/rpc-agent.service
+# 3) sudo systemctl daemon-reload && sudo systemctl enable --now rpc-agent
+
+[Unit]
+Description=Remote PC Control Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME/remote-pc-control/agent
+ExecStart=/usr/bin/python3 /home/YOUR_USERNAME/remote-pc-control/agent/agent.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+{
+  "name": "remote-pc-control",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted remote power control for your own PC (shutdown/restart/sleep/lock) from your phone. GitHub + Vercel frontend, authenticated.",
+  "engines": {
+    "node": ">=18"
+  }
+}
