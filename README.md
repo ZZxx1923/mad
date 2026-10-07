@@ -119,7 +119,12 @@ python agent.py
 
 ## التشغيل التلقائي (ليبقى الـ Agent دائم العمل)
 
-**ويندوز (الأفضل):** افتح **Task Scheduler** → *Create Task*:
+**الأسهل على ويندوز (مستحسن):** انقر نقراً مزدوجاً على **`install-device.bat`**.
+سيثبّت بايثون إن لزم، يسألك رابط Vercel والتوكن، ويسجّل الوكيل ليعمل **بالخلفية تلقائياً عند كل تشغيل للويندوز** (ويعيد تشغيله لو توقف) — بدون نافذة ظاهرة.
+> ⚠️ لا تشغّل ملفات `.ps1` بنقرة مزدوجة (يظهر تحذير أمان وتنغلق النافذة). استخدم ملفات `.bat` دائماً.
+> للإزالة لاحقاً: `uninstall-device.bat`.
+
+**يدوياً عبر Task Scheduler:** افتح **Task Scheduler** → *Create Task*:
 - Trigger: *At log on*.
 - Action: *Start a program* → البرنامج: `wscript.exe`، والوسيطة: مسار `run_agent_hidden.vbs` (يشغّله بالخلفية بدون نافذة).
 - في *Settings* فعّل *Restart the task if it fails*.

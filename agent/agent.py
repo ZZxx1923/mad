@@ -26,6 +26,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.environ.get("RPC_CONFIG", os.path.join(HERE, "config.json"))
+LOG_PATH = os.path.join(HERE, "agent.log")
 OS_NAME = platform.system()  # 'Windows' | 'Linux' | 'Darwin'
 
 ALLOWED = {"shutdown", "restart", "sleep", "lock", "logoff", "cancel", "wake"}
@@ -34,14 +35,36 @@ ALLOWED = {"shutdown", "restart", "sleep", "lock", "logoff", "cancel", "wake"}
 # --------------------------- helpers ---------------------------
 
 def log(*a):
-    print(time.strftime("[%H:%M:%S]"), *a, flush=True)
+    """يطبع للشاشة ويكتب أيضاً في agent.log (مفيد عند التشغيل بالخلفية)."""
+    line = time.strftime("[%Y-%m-%d %H:%M:%S] ") + " ".join(str(x) for x in a)
+    try:
+        print(line, flush=True)
+    except Exception:
+        pass
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def _trim_log(max_bytes=1_000_000):
+    """يقصّ ملف السجل إذا كبر، حتى لا يكبر بلا حدود."""
+    try:
+        if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > max_bytes:
+            with open(LOG_PATH, "r", encoding="utf-8", errors="ignore") as f:
+                tail = f.readlines()[-500:]
+            with open(LOG_PATH, "w", encoding="utf-8") as f:
+                f.writelines(tail)
+    except Exception:
+        pass
 
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
         log("ERROR: config.json غير موجود. انسخ config.example.json إلى config.json واملأه.")
         sys.exit(1)
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:  # utf-8-sig يتسامح مع BOM
         cfg = json.load(f)
     for key in ("server_url", "agent_token"):
         if not cfg.get(key):
@@ -146,6 +169,7 @@ def main():
     hb_interval = float(cfg["heartbeat_interval"])
     host = socket.gethostname()
 
+    _trim_log()
     log(f"بدء التشغيل | server={base} | host={host} | os={OS_NAME}")
     log("في انتظار الأوامر… (أوقِف بـ Ctrl+C)")
 
