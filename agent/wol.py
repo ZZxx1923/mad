@@ -1,16 +1,16 @@
-"""Wake-on-LAN: يرسل 'Magic Packet' لإيقاظ جهاز على نفس الشبكة المحلية."""
+"""Wake-on-LAN: sends a 'magic packet' to wake a device on the same local network."""
 import socket
 
 
 def wake(mac, broadcast="255.255.255.255", port=9):
     if not mac:
-        raise ValueError("wol_mac غير مضبوط في config.json")
+        raise ValueError("wol_mac is not set in config.json")
 
     clean = mac.replace(":", "").replace("-", "").replace(".", "").strip()
     if len(clean) != 12:
-        raise ValueError(f"عنوان MAC غير صحيح: {mac}")
+        raise ValueError(f"invalid MAC address: {mac}")
 
-    # 6 بايت FF ثم تكرار عنوان MAC 16 مرة
+    # 6 bytes of FF followed by the MAC repeated 16 times
     packet = bytes.fromhex("FF" * 6 + clean * 16)
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -24,8 +24,8 @@ def wake(mac, broadcast="255.255.255.255", port=9):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("الاستخدام: python wol.py AA:BB:CC:DD:EE:FF [broadcast]")
+        print("Usage: python wol.py AA:BB:CC:DD:EE:FF [broadcast]")
         sys.exit(1)
     bcast = sys.argv[2] if len(sys.argv) > 2 else "255.255.255.255"
     wake(sys.argv[1], bcast)
-    print("تم إرسال إشارة الإيقاظ إلى", sys.argv[1])
+    print("Magic packet sent to", sys.argv[1])

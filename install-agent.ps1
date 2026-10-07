@@ -1,16 +1,16 @@
 #Requires -Version 5.1
 <#
-  إعداد هذا الجهاز (الوكيل) — بنقرة واحدة
-  ---------------------------------------
-  - يثبّت Python تلقائياً إذا كان ناقصاً.
-  - يجهّز agent/config.json (يسألك الرابط والتوكن، أو يأخذهما من المعطيات).
-  - يسجّل مهمة في Task Scheduler تشغّل الوكيل بالخلفية تلقائياً عند كل تشغيل للويندوز،
-    وتعيد تشغيله لو توقف — بدون أي نافذة ظاهرة.
-  - يشغّله فوراً.
+  Set up this device (the agent) - one click
+  ------------------------------------------
+  - Installs Python automatically if missing.
+  - Prepares agent/config.json (asks for the URL and token, or takes them from params).
+  - Registers a Scheduled Task that runs the agent in the background automatically at
+    every Windows logon, and restarts it if it stops - with no visible window.
+  - Starts it immediately.
 
-  أمثلة:
+  Examples:
      powershell -ExecutionPolicy Bypass -File .\install-agent.ps1
-     powershell -ExecutionPolicy Bypass -File .\install-agent.ps1 -Remove   (لإزالة الوكيل)
+     powershell -ExecutionPolicy Bypass -File .\install-agent.ps1 -Remove   (to remove the agent)
 #>
 
 param(
@@ -22,11 +22,20 @@ param(
 $ErrorActionPreference = 'Stop'
 $TaskName = 'RemotePCControlAgent'
 
+# If anything fails, show it and keep the window open instead of closing instantly
+trap {
+    Write-Host ("`n[ERROR] " + $_.Exception.Message) -ForegroundColor Red
+    if ($_.InvocationInfo) { Write-Host ("  Line: " + $_.InvocationInfo.Line.Trim()) -ForegroundColor DarkGray }
+    Read-Host "`nPress Enter to close" | Out-Null
+    exit 1
+}
+try { Set-Location -LiteralPath $PSScriptRoot } catch {}
+
 function Step($m) { Write-Host "`n==== $m ====" -ForegroundColor Cyan }
 function Info($m) { Write-Host "  $m" -ForegroundColor Gray }
 function Ok($m)   { Write-Host "  [OK] $m" -ForegroundColor Green }
 function Warn($m) { Write-Host "  [!] $m" -ForegroundColor Yellow }
-function Die($m)  { Write-Host "`n[خطأ] $m" -ForegroundColor Red; exit 1 }
+function Die($m)  { Write-Host "`n[ERROR] $m" -ForegroundColor Red; Read-Host "Press Enter to close" | Out-Null; exit 1 }
 function Have($c) { return [bool](Get-Command $c -ErrorAction SilentlyContinue) }
 function Refresh-Path {
     $m = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -38,36 +47,37 @@ $agentDir = Join-Path $PSScriptRoot 'agent'
 $agentPy  = Join-Path $agentDir 'agent.py'
 $cfgPath  = Join-Path $agentDir 'config.json'
 
-# ----------------------------- إزالة -----------------------------
+# ----------------------------- remove -----------------------------
 if ($Remove) {
-    Step "إزالة الوكيل من هذا الجهاز"
+    Step "Removing the agent from this device"
     try {
         Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
-        Ok "تمت إزالة المهمة المجدولة. لن يعمل الوكيل بعد الآن."
+        Ok "Scheduled task removed. The agent will no longer run."
     } catch {
-        Warn "لا توجد مهمة مسجّلة بهذا الاسم (ربما أُزيلت مسبقاً)."
+        Warn "No task registered with this name (maybe already removed)."
     }
+    Read-Host "Press Enter to close" | Out-Null
     exit 0
 }
 
-# ----------------------------- فحوصات -----------------------------
-Step "فحص الملفات"
-if (-not (Test-Path $agentPy)) { Die "لم أجد agent/agent.py بجانب هذا السكربت. شغّله من داخل مجلد المشروع." }
-Ok "تم العثور على الوكيل"
+# ----------------------------- checks -----------------------------
+Step "Checking files"
+if (-not (Test-Path $agentPy)) { Die "Could not find agent/agent.py next to this script. Run it from inside the project folder." }
+Ok "Agent found"
 
 # ----------------------------- Python -----------------------------
-Step "التأكد من Python"
+Step "Checking Python"
 if (-not (Have 'python')) {
-    Warn "Python غير مثبّت — جارِ التثبيت عبر winget…"
-    if (-not (Have 'winget')) { Die "winget غير متاح. ثبّت Python من python.org ثم أعد التشغيل." }
+    Warn "Python is not installed - installing via winget..."
+    if (-not (Have 'winget')) { Die "winget is unavailable. Install Python from python.org then re-run." }
     winget install --id Python.Python.3.12 -e --source winget --accept-source-agreements --accept-package-agreements
     Refresh-Path
-    if (-not (Have 'python')) { Die "تعذّر العثور على Python بعد التثبيت. افتح نافذة جديدة وأعد المحاولة." }
+    if (-not (Have 'python')) { Die "Could not find Python after install. Open a new window and try again." }
 }
-Ok "Python جاهز"
+Ok "Python ready"
 
-# تحديد مسار pythonw (يشغّل بلا نافذة سوداء)
+# Resolve pythonw path (runs with no black console window)
 $pythonw = (Get-Command pythonw.exe -ErrorAction SilentlyContinue).Source
 if (-not $pythonw) {
     $python = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
@@ -76,13 +86,13 @@ if (-not $pythonw) {
         if (Test-Path $cand) { $pythonw = $cand } else { $pythonw = $python }
     }
 }
-if (-not $pythonw) { Die "تعذّر تحديد مسار Python." }
-Info "المشغّل: $pythonw"
+if (-not $pythonw) { Die "Could not resolve the Python path." }
+Info "Launcher: $pythonw"
 
-# ----------------------------- الإعداد (config.json) -----------------------------
-Step "إعداد الاتصال"
+# ----------------------------- config.json -----------------------------
+Step "Connection settings"
 
-# أعد استخدام القيم الموجودة إن وُجدت
+# Reuse existing values if present
 $wolMac = 'AA:BB:CC:DD:EE:FF'; $wolBc = '255.255.255.255'
 if (Test-Path $cfgPath) {
     try {
@@ -95,16 +105,16 @@ if (Test-Path $cfgPath) {
 }
 
 if ([string]::IsNullOrWhiteSpace($ServerUrl)) {
-    $ServerUrl = Read-Host "رابط موقعك على Vercel (مثال: https://your-app.vercel.app)"
+    $ServerUrl = Read-Host "Your Vercel site URL (e.g. https://your-app.vercel.app)"
 }
 $ServerUrl = $ServerUrl.Trim().TrimEnd('/')
-if ($ServerUrl -notmatch '^https?://') { Die "الرابط غير صحيح — لازم يبدأ بـ https://" }
+if ($ServerUrl -notmatch '^https?://') { Die "Invalid URL - it must start with https://" }
 
 if ([string]::IsNullOrWhiteSpace($AgentToken)) {
-    Info "اكتب نفس قيمة AGENT_TOKEN الموجودة في إعدادات Vercel (Environment Variables)."
+    Info "Enter the SAME AGENT_TOKEN value you set in Vercel (Environment Variables)."
     $AgentToken = Read-Host "AGENT_TOKEN"
 }
-if ([string]::IsNullOrWhiteSpace($AgentToken)) { Die "AGENT_TOKEN مطلوب." }
+if ([string]::IsNullOrWhiteSpace($AgentToken)) { Die "AGENT_TOKEN is required." }
 
 $config = [ordered]@{
     server_url         = $ServerUrl
@@ -114,13 +124,13 @@ $config = [ordered]@{
     wol_mac            = $wolMac
     wol_broadcast      = $wolBc
 }
-# كتابة JSON بترميز UTF-8 بدون BOM (مهم حتى يقرأه بايثون بشكل صحيح)
+# Write JSON as UTF-8 without BOM (so Python reads it correctly)
 $json = ($config | ConvertTo-Json)
 [System.IO.File]::WriteAllText($cfgPath, $json, (New-Object System.Text.UTF8Encoding($false)))
-Ok "تم حفظ الإعداد في agent/config.json"
+Ok "Saved settings to agent/config.json"
 
-# ----------------------------- مهمة التشغيل التلقائي -----------------------------
-Step "تسجيل التشغيل التلقائي (يعمل بالخلفية دائماً)"
+# ----------------------------- auto-start task -----------------------------
+Step "Registering auto-start (always runs in background)"
 
 $action = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$agentPy`"" -WorkingDirectory $agentDir
 $trigger = New-ScheduledTaskTrigger -AtLogOn
@@ -131,40 +141,40 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Force -Description "Remote PC Control Agent" | Out-Null
-Ok "تم تسجيل المهمة: $TaskName"
+Ok "Task registered: $TaskName"
 
-# حذف سجل قديم ثم تشغيل
+# Clear old log, then start
 $logPath = Join-Path $agentDir 'agent.log'
 Remove-Item $logPath -ErrorAction SilentlyContinue
 Start-ScheduledTask -TaskName $TaskName
-Info "جارِ التشغيل…"
+Info "Starting..."
 Start-Sleep -Seconds 5
 
-# ----------------------------- التحقق -----------------------------
-Step "التحقق من العمل"
+# ----------------------------- verify -----------------------------
+Step "Verifying"
 $state = (Get-ScheduledTask -TaskName $TaskName).State
-Info "حالة المهمة: $state"
+Info "Task state: $state"
 if (Test-Path $logPath) {
-    Write-Host "  --- آخر أسطر السجل ---" -ForegroundColor DarkGray
+    Write-Host "  --- last log lines ---" -ForegroundColor DarkGray
     Get-Content $logPath -Tail 6 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
     $bad401  = Select-String -Path $logPath -Pattern '401' -Quiet -ErrorAction SilentlyContinue
     $started = Select-String -Path $logPath -Pattern 'server=' -Quiet -ErrorAction SilentlyContinue
     if ($bad401) {
-        Warn "AGENT_TOKEN لا يطابق المضبوط في Vercel (خطأ 401). صحّح التوكن ثم أعد التشغيل."
+        Warn "AGENT_TOKEN does not match the one in Vercel (error 401). Fix the token and re-run."
     } elseif ($started) {
-        Ok "الوكيل يعمل ✔  افتح موقعك من الجوال وستجد الجهاز 'متصل'."
+        Ok "Agent is running. Open your site on your phone - the device will show 'online'."
     } else {
-        Warn "اشتغل لكن راجع السجل أعلاه للتأكد (الرابط/التوكن/الشبكة)."
+        Warn "Started, but check the log above (URL / token / network)."
     }
 } else {
-    Warn "لم يُنشأ ملف السجل بعد. انتظر ثوانٍ ثم افحص agent/agent.log"
+    Warn "Log file not created yet. Wait a few seconds then check agent/agent.log"
 }
 
 Write-Host "`n========================================" -ForegroundColor Green
-Write-Host "  تم إعداد هذا الجهاز 🎉" -ForegroundColor Green
+Write-Host "  This device is set up" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "  الوكيل يعمل بالخلفية الآن وسيبدأ تلقائياً عند كل تشغيل للويندوز."
-Write-Host "  السجل: $logPath"
-Write-Host "  للإيقاف/الإزالة لاحقاً:" -ForegroundColor Cyan
-Write-Host "     powershell -ExecutionPolicy Bypass -File .\install-agent.ps1 -Remove"
+Write-Host "  The agent runs in the background now and starts automatically at every Windows logon."
+Write-Host "  Log: $logPath"
+Write-Host "  To stop / remove later: double-click uninstall-device.bat" -ForegroundColor Cyan
 Write-Host ""
+Read-Host "Press Enter to close" | Out-Null

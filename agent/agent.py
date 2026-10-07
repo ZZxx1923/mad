@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Remote PC Control — Agent
+Remote PC Control - Agent
 =========================
-يعمل هذا البرنامج على جهازك (البيسي)، يسأل سيرفر Vercel باستمرار عن الأوامر،
-وينفّذها: إيقاف / إعادة تشغيل / سكون / قفل / تسجيل خروج / إلغاء / Wake-on-LAN.
+Runs on your PC, polls the Vercel server for commands, and executes them:
+shutdown / restart / sleep / lock / logoff / cancel / Wake-on-LAN.
 
-- تحكّم بجهازك أنت فقط: كل طلب محمي برمز سري (AGENT_TOKEN) يطابق المضبوط في Vercel.
-- شفّاف تماماً: ينفّذ فقط قائمة أوامر ثابتة ومعروفة، ويطبع كل خطوة في السجل.
-- لا يفتح أي منفذ ولا يستقبل اتصالات واردة — هو من يسأل السيرفر (آمن خلف الراوتر).
+- You control only your own PC: every request is protected by a secret token
+  (AGENT_TOKEN) that must match the one set in Vercel.
+- Fully transparent: it only runs a fixed, known set of actions and logs each step.
+- It opens no ports and accepts no inbound connections - it asks the server
+  (safe behind your router).
 
-التشغيل:
+Run:
     python agent.py
-الإعداد: انسخ config.example.json إلى config.json واملأ القيم.
+Setup: copy config.example.json to config.json and fill in the values.
 """
 
 import json
@@ -35,7 +37,7 @@ ALLOWED = {"shutdown", "restart", "sleep", "lock", "logoff", "cancel", "wake"}
 # --------------------------- helpers ---------------------------
 
 def log(*a):
-    """يطبع للشاشة ويكتب أيضاً في agent.log (مفيد عند التشغيل بالخلفية)."""
+    """Print to screen and also append to agent.log (useful for background runs)."""
     line = time.strftime("[%Y-%m-%d %H:%M:%S] ") + " ".join(str(x) for x in a)
     try:
         print(line, flush=True)
@@ -49,7 +51,7 @@ def log(*a):
 
 
 def _trim_log(max_bytes=1_000_000):
-    """يقصّ ملف السجل إذا كبر، حتى لا يكبر بلا حدود."""
+    """Trim the log file if it grows too large."""
     try:
         if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > max_bytes:
             with open(LOG_PATH, "r", encoding="utf-8", errors="ignore") as f:
@@ -62,13 +64,13 @@ def _trim_log(max_bytes=1_000_000):
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
-        log("ERROR: config.json غير موجود. انسخ config.example.json إلى config.json واملأه.")
+        log("ERROR: config.json not found. Copy config.example.json to config.json and fill it in.")
         sys.exit(1)
-    with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:  # utf-8-sig يتسامح مع BOM
+    with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:  # utf-8-sig tolerates a BOM
         cfg = json.load(f)
     for key in ("server_url", "agent_token"):
         if not cfg.get(key):
-            log(f"ERROR: القيمة '{key}' ناقصة في config.json")
+            log(f"ERROR: value '{key}' is missing in config.json")
             sys.exit(1)
     cfg["server_url"] = cfg["server_url"].rstrip("/")
     cfg.setdefault("poll_interval", 2)
@@ -88,7 +90,7 @@ def http(url, method="GET", token=None, body=None, timeout=25):
 
 
 def run(cmd):
-    """نفّذ أمر نظام. يرفع استثناء عند الفشل."""
+    """Run a system command. Raises on failure."""
     log("exec:", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
@@ -110,8 +112,8 @@ def do_action(action, delay=0):
         elif action == "lock":
             run(["rundll32.exe", "user32.dll,LockWorkStation"])
         elif action == "sleep":
-            # ملاحظة: إذا كان الإسبات (Hibernate) مفعّلاً قد ينام إسباتاً.
-            # لإيقاف الإسبات: powercfg -h off  (كمسؤول)
+            # Note: if Hibernate is enabled it may hibernate instead.
+            # To disable hibernate (as admin): powercfg -h off
             run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
         else:
             raise ValueError(f"unknown action: {action}")
@@ -144,16 +146,16 @@ def do_action(action, delay=0):
         elif action == "logoff":
             run(["osascript", "-e", 'tell application "System Events" to log out'])
         elif action == "cancel":
-            raise ValueError("cancel غير مدعوم على macOS")
+            raise ValueError("cancel is not supported on macOS")
         else:
             raise ValueError(f"unknown action: {action}")
 
     else:
-        raise RuntimeError(f"نظام تشغيل غير مدعوم: {OS_NAME}")
+        raise RuntimeError(f"unsupported OS: {OS_NAME}")
 
 
 def do_wake(cfg):
-    from wol import wake  # ملف wol.py بجانب هذا الملف
+    from wol import wake  # wol.py sits next to this file
     mac = cfg.get("wol_mac")
     bcast = cfg.get("wol_broadcast", "255.255.255.255")
     wake(mac, bcast)
@@ -170,55 +172,55 @@ def main():
     host = socket.gethostname()
 
     _trim_log()
-    log(f"بدء التشغيل | server={base} | host={host} | os={OS_NAME}")
-    log("في انتظار الأوامر… (أوقِف بـ Ctrl+C)")
+    log(f"starting | server={base} | host={host} | os={OS_NAME}")
+    log("waiting for commands... (stop with Ctrl+C)")
 
     last_hb = 0.0
     while True:
         now = time.time()
         try:
-            # نبضة الحياة (تُظهر 'متصل' في الجوال)
+            # heartbeat (shows 'online' on your phone)
             if now - last_hb >= hb_interval:
                 http(f"{base}/api/heartbeat", "POST", token, {"hostname": host, "os": OS_NAME})
                 last_hb = now
 
-            # اسأل عن الأمر التالي
+            # ask for the next command
             data = http(f"{base}/api/poll", "GET", token)
             cmd = data.get("command")
             if cmd:
                 action = cmd.get("action")
                 cid = cmd.get("id")
                 delay = cmd.get("delay", 0)
-                log(f"استلمت أمراً: {action} (id={cid})")
+                log(f"received command: {action} (id={cid})")
 
                 if action not in ALLOWED:
                     http(f"{base}/api/ack", "POST", token,
-                         {"id": cid, "status": "error", "message": f"رُفض أمر غير معروف: {action}"})
+                         {"id": cid, "status": "error", "message": f"rejected unknown action: {action}"})
                     continue
 
-                # أبلغ الجوال بالاستلام فوراً (قبل ما ينطفئ الجهاز)
+                # tell the phone it was received right away (before the PC powers off)
                 try:
                     http(f"{base}/api/ack", "POST", token,
-                         {"id": cid, "status": "accepted", "message": "جارِ التنفيذ"})
+                         {"id": cid, "status": "accepted", "message": "executing"})
                 except Exception:
                     pass
 
                 try:
                     if action == "wake":
                         do_wake(cfg)
-                        msg = "تم إرسال إشارة التشغيل (WoL)"
+                        msg = "magic packet sent (WoL)"
                     else:
                         do_action(action, delay)
-                        msg = "تم"
-                    # أبلغ بالنجاح (قد لا يصل إن انطفأ الجهاز فوراً — وهذا طبيعي)
+                        msg = "ok"
+                    # report success (may not arrive if the PC powers off immediately - that's fine)
                     try:
                         http(f"{base}/api/ack", "POST", token,
                              {"id": cid, "status": "done", "message": msg})
                     except Exception:
                         pass
-                    log("نُفّذ:", action, "—", msg)
+                    log("executed:", action, "-", msg)
                 except Exception as e:
-                    log("فشل تنفيذ", action, ":", e)
+                    log("failed to execute", action, ":", e)
                     try:
                         http(f"{base}/api/ack", "POST", token,
                              {"id": cid, "status": "error", "message": str(e)})
@@ -227,18 +229,18 @@ def main():
 
         except urllib.error.HTTPError as e:
             if e.code == 401:
-                log("ERROR 401: الرمز السري (agent_token) لا يطابق المضبوط في Vercel. راجع الإعداد.")
+                log("ERROR 401: agent_token does not match the one set in Vercel. Check the config.")
                 time.sleep(5)
             else:
                 log("HTTP error:", e.code, e.reason)
         except urllib.error.URLError as e:
-            log("خطأ شبكة (سيُعاد المحاولة):", e.reason)
+            log("network error (will retry):", e.reason)
             time.sleep(3)
         except KeyboardInterrupt:
-            log("إيقاف البرنامج.")
+            log("stopping.")
             break
         except Exception as e:
-            log("خطأ غير متوقع:", e)
+            log("unexpected error:", e)
 
         time.sleep(poll_interval)
 

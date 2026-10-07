@@ -1,5 +1,6 @@
 @echo off
-REM تشغيل الـ Agent على ويندوز. ضعه في نفس مجلد agent.py
+chcp 65001 >nul
+title Remote PC Control - Agent
 cd /d "%~dp0"
 python agent.py
 pause

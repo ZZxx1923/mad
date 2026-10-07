@@ -1,5 +1,5 @@
-' تشغيل الـ Agent على ويندوز بدون نافذة سوداء ظاهرة (في الخلفية).
-' استخدمه مع Task Scheduler أو مجلد Startup.
+' Run the agent on Windows with no visible console window (background).
+' Use with Task Scheduler or the Startup folder.
 Set sh = CreateObject("WScript.Shell")
 scriptDir = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
 sh.CurrentDirectory = scriptDir

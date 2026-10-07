@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title إزالة الوكيل - التحكم عن بعد
+title Remote PC Control - Remove Agent
 cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-agent.ps1" -Remove
 echo.
-echo   انتهى. اضغط أي زر للإغلاق.
+echo Done. Press any key to close.
 pause >nul
