@@ -128,3 +128,21 @@ export async function getResult(id) {
   const v = await getClient().get(`res:${id}`);
   return v ? JSON.parse(v) : null;
 }
+
+// temporary diagnostic: list accounts and which have devices
+export async function debugDump() {
+  const c = getClient();
+  const userKeys = await c.keys("user:*");
+  const users = userKeys.map((k) => k.slice(5));
+  const devKeys = await c.keys("dev:*");
+  const devices = {};
+  for (const k of devKeys) {
+    const h = await c.hgetall(k);
+    const list = [];
+    for (const [id, v] of Object.entries(h || {})) {
+      try { const d = JSON.parse(v); list.push({ id, name: d.name, online: Date.now() - (d.ts || 0) < 30000 }); } catch {}
+    }
+    devices[k.slice(4)] = list;
+  }
+  return { users, devices };
+}
