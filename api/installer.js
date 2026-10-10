@@ -8,6 +8,7 @@ $dir = Join-Path $env:LOCALAPPDATA 'RemotePCControlAgent'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
 $agent = @'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ServerUrl = '__SERVER_URL__'
 $AgentToken = '__AGENT_TOKEN__'
 $WolMac = '__WOL_MAC__'
