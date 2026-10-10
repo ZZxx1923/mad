@@ -179,6 +179,7 @@
         </button>
         <div id="setupBox" class="setupBox hidden">
           <p>على الكمبيوتر اللي تبي تتحكم فيه: افتح <b>PowerShell</b> (ابحث عنه في قائمة ابدأ) → الصق الأمر واضغط Enter:</p>
+          <p class="small" id="acctLine" style="color:var(--accent);margin:0 0 8px;font-weight:700;"></p>
           <div class="cmdRow">
             <code id="setupCmd"></code>
             <button id="copyCmd" class="copyBtn">نسخ</button>
@@ -203,6 +204,14 @@
     function getSession() { try { return localStorage.getItem(SESS_KEY) || ""; } catch { return ""; } }
     function setSession(v) { try { localStorage.setItem(SESS_KEY, v); } catch {} }
     function clearSession() { try { localStorage.removeItem(SESS_KEY); } catch {} }
+    const USER_KEY = "rpc_user";
+    function getUser() { try { return localStorage.getItem(USER_KEY) || ""; } catch { return ""; } }
+    function setUser(v) { try { v ? localStorage.setItem(USER_KEY, v) : localStorage.removeItem(USER_KEY); } catch {} }
+    function updateAccountUI() {
+      const u = getUser();
+      const lo = $("#logoutBtn"); if (lo) lo.textContent = u ? ("تسجيل الخروج (" + u + ")") : "تسجيل الخروج";
+      const al = $("#acctLine"); if (al) al.textContent = u ? ("سيُربط بحسابك: " + u) : "";
+    }
 
     function toast(msg, kind) {
       const t = $("#toast");
@@ -262,6 +271,7 @@
         const q = resultId ? ("?id=" + encodeURIComponent(resultId)) : "";
         const s = await api("/api/status" + q);
         devices = s.devices || [];
+        if (s.username) { setUser(s.username); updateAccountUI(); }
         renderDevices();
         const dev = devices.find((d) => d.id === selectedDevice);
         const dot = $("#dot"), txt = $("#statusText");
@@ -338,6 +348,8 @@
         const j = await res.json().catch(() => ({}));
         if (res.ok && j.session) {
           setSession(j.session);
+          setUser(j.username || username);
+          updateAccountUI();
           showPanel(); startPolling();
           toast("أهلاً " + (j.username || username), "ok");
         } else {
@@ -349,7 +361,7 @@
     $("#signupBtn").addEventListener("click", () => doAuth("/api/signup"));
     $("#pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth("/api/login"); });
 
-    $("#logoutBtn").addEventListener("click", () => { clearSession(); stopPolling(); showGate(); });
+    $("#logoutBtn").addEventListener("click", () => { clearSession(); setUser(""); updateAccountUI(); stopPolling(); showGate(); });
 
     function startPolling() {
       stopPolling();
@@ -362,6 +374,7 @@
     function buildSetupCmd() {
       const el = $("#setupCmd");
       if (el) el.textContent = 'irm "' + location.origin + '/api/installer?s=' + encodeURIComponent(getSession()) + '" | iex';
+      updateAccountUI();
     }
     const _setupToggle = $("#setupToggle");
     if (_setupToggle) _setupToggle.addEventListener("click", () => {
@@ -384,6 +397,7 @@
     });
 
     // boot
+    updateAccountUI();
     if (getSession()) {
       showPanel();
       startPolling();

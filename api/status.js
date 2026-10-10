@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     let result = null;
     const id = req.query && req.query.id;
     if (id) result = await getResult(id);
-    return res.status(200).json({ devices, result });
+    return res.status(200).json({ username: user, devices, result });
   } catch (e) {
     return res.status(500).json({ error: "status_failed", detail: String(e) });
   }
