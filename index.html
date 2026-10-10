@@ -88,6 +88,15 @@
     }
     .primary:active { opacity: .9; }
     .link { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; margin-top: 10px; }
+    .setupPc { margin-top: 10px; }
+    #setupToggle { width: 100%; }
+    .setupBox { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-top: 10px; text-align: right; }
+    .setupBox p { margin: 0 0 10px; font-size: 13px; color: var(--muted); line-height: 1.8; }
+    .setupBox p.small { margin: 10px 0 0; font-size: 12px; }
+    .cmdRow { display: flex; gap: 8px; align-items: stretch; }
+    .cmdRow code { flex: 1; direction: ltr; text-align: left; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 12px; color: var(--text); overflow-x: auto; white-space: nowrap; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .copyBtn { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 16px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .copyBtn:active { opacity: .85; }
 
     /* toast */
     #toast {
@@ -153,6 +162,21 @@
         زر «تشغيل (Wake)» يرسل إشارة Wake-on-LAN — يشتغل فقط إذا كان عندك جهاز ثاني دايم شغّال على نفس الشبكة
         (راجع الشرح في ملف README). باقي الأوامر تنفّذ مباشرة على الجهاز.
       </p>
+
+      <div class="setupPc">
+        <button class="btn span2" id="setupToggle">
+          <span class="ico">⚙️</span><span>تثبيت الوكيل على هذا الكمبيوتر</span>
+        </button>
+        <div id="setupBox" class="setupBox hidden">
+          <p>على الكمبيوتر اللي تبي تتحكم فيه: افتح <b>PowerShell</b> (ابحث عنه في قائمة ابدأ) → الصق الأمر واضغط Enter:</p>
+          <div class="cmdRow">
+            <code id="setupCmd"></code>
+            <button id="copyCmd" class="copyBtn">نسخ</button>
+          </div>
+          <p class="small">يثبّت الوكيل ويشغّله تلقائياً بالخلفية — بدون بايثون ولا ملفات. (ويندوز)</p>
+        </div>
+      </div>
+
       <button class="link" id="logoutBtn">تغيير كلمة السر / خروج</button>
     </section>
 
@@ -262,6 +286,31 @@
       pollTimer = setInterval(updateStatus, 4000);
     }
     function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
+    // setup-on-this-PC helper
+    function buildSetupCmd() {
+      const el = $("#setupCmd");
+      if (el) el.textContent = 'irm "' + location.origin + '/api/installer?k=' + encodeURIComponent(getPw()) + '" | iex';
+    }
+    const _setupToggle = $("#setupToggle");
+    if (_setupToggle) _setupToggle.addEventListener("click", () => {
+      buildSetupCmd();
+      $("#setupBox").classList.toggle("hidden");
+    });
+    const _copyCmd = $("#copyCmd");
+    if (_copyCmd) _copyCmd.addEventListener("click", async () => {
+      buildSetupCmd();
+      const txt = $("#setupCmd").textContent;
+      try {
+        await navigator.clipboard.writeText(txt);
+        toast("تم النسخ ✓", "ok");
+      } catch (e) {
+        const r = document.createRange(); r.selectNode($("#setupCmd"));
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        try { document.execCommand("copy"); toast("تم النسخ ✓", "ok"); } catch (e2) { toast("انسخه يدوياً", "err"); }
+        sel.removeAllRanges();
+      }
+    });
 
     // boot
     if (getPw()) {
