@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   const deviceId = String(body.deviceId || body.hostname || "pc");
   try {
     await registerDevice(user, deviceId, { name: body.hostname || deviceId, os: body.os || "" });
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, user });
   } catch (e) {
     return res.status(500).json({ error: "heartbeat_failed", detail: String(e) });
   }
