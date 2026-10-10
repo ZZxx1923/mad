@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Self-hosted remote power control for your own PC (shutdown/restart/sleep/lock) from your phone. GitHub + Vercel frontend, authenticated.",
+  "description": "Self-hosted remote power control for your own PC from your phone.",
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1"
   }
 }
