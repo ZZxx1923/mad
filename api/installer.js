@@ -1,6 +1,7 @@
 // Returns a self-contained PowerShell installer for the Windows agent.
-// The agent is pure PowerShell (no Python needed). Protected by the UI password.
-// Usage from the site: irm "https://<host>/api/installer?k=<UI_PASSWORD>" | iex
+// The agent is pure PowerShell (no Python needed). Scoped to the logged-in account.
+// Usage from the site: irm "https://<host>/api/installer?s=<session>" | iex
+import { userFromSession, getUserToken } from "./_lib/kv.js";
 
 const TEMPLATE = `$ErrorActionPreference='Stop'
 Write-Host 'Installing Remote PC Control agent...' -ForegroundColor Cyan
@@ -81,24 +82,28 @@ Write-Host 'It starts automatically at every Windows logon.'
 Write-Host 'Open your site on your phone - this PC should show as online in a few seconds.'
 `;
 
-export default function handler(req, res) {
-  const pwd = (req.query && req.query.k) || req.headers["x-ui-password"];
+export default async function handler(req, res) {
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  if (!process.env.UI_PASSWORD || pwd !== process.env.UI_PASSWORD) {
-    res.status(401).send("# Unauthorized: wrong or missing password (k).");
+  const session = (req.query && (req.query.s || req.query.k)) || req.headers["x-session"];
+  const user = await userFromSession(session);
+  if (!user) {
+    res.status(401).send("# Unauthorized: open the site, log in, then use the install button.");
+    return;
+  }
+  const token = await getUserToken(user);
+  if (!token) {
+    res.status(401).send("# Unauthorized.");
     return;
   }
 
   const host = (req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
   const proto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
   const serverUrl = `${proto}://${host}`;
-  const token = process.env.AGENT_TOKEN || "";
-  const wolMac = process.env.WOL_MAC || "";
 
   const script = TEMPLATE
     .split("__SERVER_URL__").join(serverUrl)
     .split("__AGENT_TOKEN__").join(token)
-    .split("__WOL_MAC__").join(wolMac);
+    .split("__WOL_MAC__").join("");
 
   res.status(200).send(script);
 }

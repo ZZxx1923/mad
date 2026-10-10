@@ -132,9 +132,11 @@
     <!-- Password gate -->
     <section id="gate" class="gate hidden">
       <h2>الدخول</h2>
-      <p>اكتب كلمة السر اللي ضبطتها في إعدادات Vercel (<code>UI_PASSWORD</code>).</p>
-      <input id="pwInput" type="password" placeholder="كلمة السر" autocomplete="current-password" />
+      <p>سجّل دخولك أو أنشئ حساباً جديداً — كل حساب يشوف أجهزته فقط.</p>
+      <input id="userInput" type="text" placeholder="اسم المستخدم" autocomplete="username" />
+      <input id="pwInput" type="password" placeholder="كلمة السر" autocomplete="current-password" style="margin-top:8px;" />
       <button class="primary" id="loginBtn">دخول</button>
+      <button class="primary" id="signupBtn" style="margin-top:8px;background:var(--card-2);">إنشاء حساب جديد</button>
     </section>
 
     <!-- Control panel -->
@@ -185,7 +187,7 @@
         </div>
       </div>
 
-      <button class="link" id="logoutBtn">تغيير كلمة السر / خروج</button>
+      <button class="link" id="logoutBtn">تسجيل الخروج</button>
     </section>
 
     <footer>Remote PC Control • تحكّم بجهازك أنت فقط</footer>
@@ -194,13 +196,13 @@
   <div id="toast"></div>
 
   <script>
-    const PW_KEY = "rpc_ui_password";
+    const SESS_KEY = "rpc_session";
     const $ = (s) => document.querySelector(s);
     let pollTimer = null;
 
-    function getPw() { try { return localStorage.getItem(PW_KEY) || ""; } catch { return ""; } }
-    function setPw(v) { try { localStorage.setItem(PW_KEY, v); } catch {} }
-    function clearPw() { try { localStorage.removeItem(PW_KEY); } catch {} }
+    function getSession() { try { return localStorage.getItem(SESS_KEY) || ""; } catch { return ""; } }
+    function setSession(v) { try { localStorage.setItem(SESS_KEY, v); } catch {} }
+    function clearSession() { try { localStorage.removeItem(SESS_KEY); } catch {} }
 
     function toast(msg, kind) {
       const t = $("#toast");
@@ -211,13 +213,13 @@
     }
 
     function showPanel() { $("#gate").classList.add("hidden"); $("#panel").classList.remove("hidden"); }
-    function showGate() { $("#panel").classList.add("hidden"); $("#gate").classList.remove("hidden"); $("#pwInput").focus(); }
+    function showGate() { $("#panel").classList.add("hidden"); $("#gate").classList.remove("hidden"); $("#userInput").focus(); }
 
     async function api(path, opts = {}) {
-      const headers = Object.assign({ "x-ui-password": getPw() }, opts.headers || {});
+      const headers = Object.assign({ "x-session": getSession() }, opts.headers || {});
       if (opts.body) headers["Content-Type"] = "application/json";
       const res = await fetch(path, { method: opts.method || "GET", headers, body: opts.body });
-      if (res.status === 401) { clearPw(); showGate(); throw new Error("unauthorized"); }
+      if (res.status === 401) { clearSession(); showGate(); throw new Error("unauthorized"); }
       return res.json();
     }
 
@@ -288,8 +290,15 @@
       } catch (e) {}
     });
 
+    let busy = false;
+    function setBtnsDisabled(v) {
+      document.querySelectorAll(".btn[data-action]").forEach((b) => { b.style.opacity = v ? ".5" : ""; b.style.pointerEvents = v ? "none" : ""; });
+    }
     async function send(action) {
+      if (busy) return;
       if (!selectedDevice) { toast("اختر جهازاً أولاً", "err"); return; }
+      busy = true; setBtnsDisabled(true);
+      setTimeout(() => { busy = false; setBtnsDisabled(false); }, 4000);
       try {
         const r = await api("/api/command", { method: "POST", body: JSON.stringify({ action, deviceId: selectedDevice }) });
         if (r.ok) {
@@ -320,16 +329,27 @@
       });
     });
 
-    $("#loginBtn").addEventListener("click", async () => {
-      const v = $("#pwInput").value.trim();
-      if (!v) return;
-      setPw(v);
-      const s = await updateStatus();
-      if (s) { showPanel(); startPolling(); } // 401 would have reopened the gate
-    });
-    $("#pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#loginBtn").click(); });
+    async function doAuth(path) {
+      const username = $("#userInput").value.trim();
+      const password = $("#pwInput").value;
+      if (!username || !password) { toast("اكتب اسم المستخدم وكلمة السر", "err"); return; }
+      try {
+        const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
+        const j = await res.json().catch(() => ({}));
+        if (res.ok && j.session) {
+          setSession(j.session);
+          showPanel(); startPolling();
+          toast("أهلاً " + (j.username || username), "ok");
+        } else {
+          toast(j.message || "تعذّر الدخول", "err");
+        }
+      } catch (e) { toast("خطأ في الاتصال", "err"); }
+    }
+    $("#loginBtn").addEventListener("click", () => doAuth("/api/login"));
+    $("#signupBtn").addEventListener("click", () => doAuth("/api/signup"));
+    $("#pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth("/api/login"); });
 
-    $("#logoutBtn").addEventListener("click", () => { clearPw(); stopPolling(); showGate(); });
+    $("#logoutBtn").addEventListener("click", () => { clearSession(); stopPolling(); showGate(); });
 
     function startPolling() {
       stopPolling();
@@ -341,7 +361,7 @@
     // setup-on-this-PC helper
     function buildSetupCmd() {
       const el = $("#setupCmd");
-      if (el) el.textContent = 'irm "' + location.origin + '/api/installer?k=' + encodeURIComponent(getPw()) + '" | iex';
+      if (el) el.textContent = 'irm "' + location.origin + '/api/installer?s=' + encodeURIComponent(getSession()) + '" | iex';
     }
     const _setupToggle = $("#setupToggle");
     if (_setupToggle) _setupToggle.addEventListener("click", () => {
@@ -364,7 +384,7 @@
     });
 
     // boot
-    if (getPw()) {
+    if (getSession()) {
       showPanel();
       startPolling();
       updateStatus();
@@ -372,7 +392,7 @@
       showGate();
     }
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden && getPw()) startPolling(); else stopPolling();
+      if (!document.hidden && getSession()) startPolling(); else stopPolling();
     });
   </script>
 </body>
