@@ -68,13 +68,21 @@ while($true){
 [System.IO.File]::WriteAllText((Join-Path $dir 'agent.ps1'), $agent, (New-Object System.Text.UTF8Encoding($false)))
 
 $ps1 = Join-Path $dir 'agent.ps1'
-$arg = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $ps1 + '"'
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$principal = New-ScheduledTaskPrincipal -UserId ($env:USERDOMAIN + '\\' + $env:USERNAME) -LogonType Interactive -RunLevel Limited
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
-Register-ScheduledTask -TaskName 'RemotePCControlAgent' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
-Start-ScheduledTask -TaskName 'RemotePCControlAgent'
+
+# stop any existing agent instances (avoid duplicate commands)
+try { Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like '*RemotePCControlAgent*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } } catch {}
+# remove any scheduled task from older versions (it may be stuck)
+try { Unregister-ScheduledTask -TaskName 'RemotePCControlAgent' -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+
+# auto-start at every logon via a Startup-folder launcher (hidden, reliable - no Task Scheduler)
+$startup = [Environment]::GetFolderPath('Startup')
+$vbs = Join-Path $startup 'RemotePCControlAgent.vbs'
+$vbsContent = 'CreateObject("Wscript.Shell").Run "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""' + $ps1 + '""", 0, False'
+[System.IO.File]::WriteAllText($vbs, $vbsContent, (New-Object System.Text.ASCIIEncoding))
+
+# start it right now (hidden)
+Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $vbs + '"')
+Start-Sleep -Seconds 4
 
 Write-Host ''
 Write-Host 'Done! The agent is installed and running.' -ForegroundColor Green
