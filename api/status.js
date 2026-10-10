@@ -1,5 +1,5 @@
-// Phone -> server. Returns whether the PC is online and (optionally) a command's result.
-import { getHeartbeat, getResult } from "./_lib/kv.js";
+// Phone -> server. Returns all known devices (with online state) and an optional command result.
+import { listDevices, getResult } from "./_lib/kv.js";
 
 export default async function handler(req, res) {
   const password = req.headers["x-ui-password"];
@@ -8,14 +8,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const hb = await getHeartbeat();
-    const online = !!(hb && Date.now() - hb.ts < 30000); // online if seen in last 30s
-
+    const devices = await listDevices();
     let result = null;
-    const id = req.query.id;
+    const id = req.query && req.query.id;
     if (id) result = await getResult(id);
-
-    return res.status(200).json({ online, heartbeat: hb, result });
+    return res.status(200).json({ devices, result });
   } catch (e) {
     return res.status(500).json({ error: "status_failed", detail: String(e) });
   }

@@ -1,5 +1,4 @@
-// Shared Redis helper. Works with any Redis connection string (REDIS_URL),
-// as provided by Vercel Storage (Upstash / Official Redis).
+// Shared Redis helper (multi-device). Works with any REDIS_URL from Vercel Storage.
 // Files under api/_lib are NOT turned into routes by Vercel (underscore prefix).
 import Redis from "ioredis";
 
@@ -18,29 +17,53 @@ function getClient() {
   return _client;
 }
 
-// ---- Command queue (newest pushed on the left, agent pops from the right = FIFO) ----
-export async function pushCommand(cmd) {
+const ONLINE_MS = 30000; // a device is "online" if seen within 30s
+
+// ---- Per-device command queue (FIFO: push left, agent pops right) ----
+export async function pushCommand(deviceId, cmd) {
   const c = getClient();
-  await c.lpush("pc:commands", JSON.stringify(cmd));
-  await c.ltrim("pc:commands", 0, 49); // keep at most 50 pending
+  const key = `pc:cmd:${deviceId}`;
+  await c.lpush(key, JSON.stringify(cmd));
+  await c.ltrim(key, 0, 49); // keep at most 50 pending
 }
 
-export async function popCommand() {
+export async function popCommand(deviceId) {
   const c = getClient();
-  const v = await c.rpop("pc:commands");
+  const v = await c.rpop(`pc:cmd:${deviceId}`);
   return v ? JSON.parse(v) : null;
 }
 
-// ---- Heartbeat: the agent proves it's alive. Auto-expires after 60s. ----
-export async function setHeartbeat(info) {
+// ---- Device registry (a hash: deviceId -> {name, os, ts}) ----
+export async function registerDevice(deviceId, info) {
   const c = getClient();
-  await c.set("pc:heartbeat", JSON.stringify(info), "EX", 60);
+  const data = { name: info.name || deviceId, os: info.os || "", ts: Date.now() };
+  await c.hset("pc:devices", deviceId, JSON.stringify(data));
 }
 
-export async function getHeartbeat() {
+export async function listDevices() {
   const c = getClient();
-  const v = await c.get("pc:heartbeat");
-  return v ? JSON.parse(v) : null;
+  const all = await c.hgetall("pc:devices");
+  const out = [];
+  for (const [id, v] of Object.entries(all || {})) {
+    try {
+      const d = JSON.parse(v);
+      out.push({
+        id,
+        name: d.name || id,
+        os: d.os || "",
+        ts: d.ts || 0,
+        online: Date.now() - (d.ts || 0) < ONLINE_MS,
+      });
+    } catch {}
+  }
+  out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  return out;
+}
+
+export async function removeDevice(deviceId) {
+  const c = getClient();
+  await c.hdel("pc:devices", deviceId);
+  await c.del(`pc:cmd:${deviceId}`);
 }
 
 // ---- Per-command result, so the phone can see what happened. Expires after 5 min. ----

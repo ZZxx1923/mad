@@ -97,6 +97,10 @@
     .cmdRow code { flex: 1; direction: ltr; text-align: left; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 12px; color: var(--text); overflow-x: auto; white-space: nowrap; font-family: ui-monospace, Menlo, Consolas, monospace; }
     .copyBtn { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 0 16px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
     .copyBtn:active { opacity: .85; }
+    .deviceBar { display: flex; gap: 8px; align-items: center; margin: 6px 0 14px; }
+    .deviceBar select { flex: 1; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 15px; }
+    .forgetBtn { background: var(--card); color: var(--muted); border: 1px solid var(--line); border-radius: 12px; width: 46px; height: 46px; font-size: 16px; cursor: pointer; flex: none; }
+    .forgetBtn:active { background: var(--card-2); }
 
     /* toast */
     #toast {
@@ -135,6 +139,10 @@
 
     <!-- Control panel -->
     <section id="panel" class="hidden">
+      <div class="deviceBar">
+        <select id="deviceSel"></select>
+        <button id="forgetBtn" class="forgetBtn" title="إزالة الجهاز من القائمة">✕</button>
+      </div>
       <div class="grid">
         <button class="btn danger" data-action="shutdown" data-confirm="1">
           <span class="ico">⏻</span><span>إيقاف التشغيل</span>
@@ -218,18 +226,47 @@
       lock: "قفل الشاشة", logoff: "تسجيل الخروج", cancel: "إلغاء الإيقاف", wake: "التشغيل",
     };
 
+    // ---- devices (multi-device) ----
+    const DEV_KEY = "rpc_device";
+    let devices = [];
+    let selectedDevice = (function () { try { return localStorage.getItem(DEV_KEY); } catch { return null; } })();
+    function saveDevice() { try { selectedDevice ? localStorage.setItem(DEV_KEY, selectedDevice) : localStorage.removeItem(DEV_KEY); } catch {} }
+
+    function renderDevices() {
+      const sel = $("#deviceSel");
+      if (!sel) return;
+      if (!selectedDevice || !devices.find((d) => d.id === selectedDevice)) {
+        selectedDevice = devices.length ? devices[0].id : null;
+        saveDevice();
+      }
+      sel.innerHTML = "";
+      if (!devices.length) {
+        const o = document.createElement("option");
+        o.value = ""; o.textContent = "— لا يوجد جهاز (ثبّت الوكيل) —";
+        sel.appendChild(o); sel.disabled = true; return;
+      }
+      sel.disabled = false;
+      for (const d of devices) {
+        const o = document.createElement("option");
+        o.value = d.id;
+        o.textContent = (d.online ? "🟢 " : "⚫ ") + d.name;
+        if (d.id === selectedDevice) o.selected = true;
+        sel.appendChild(o);
+      }
+    }
+
     async function updateStatus(resultId) {
       try {
         const q = resultId ? ("?id=" + encodeURIComponent(resultId)) : "";
         const s = await api("/api/status" + q);
+        devices = s.devices || [];
+        renderDevices();
+        const dev = devices.find((d) => d.id === selectedDevice);
         const dot = $("#dot"), txt = $("#statusText");
-        if (s.online) {
-          dot.className = "dot on";
-          txt.textContent = s.heartbeat?.hostname ? ("متصل • " + s.heartbeat.hostname) : "متصل";
-        } else {
-          dot.className = "dot off";
-          txt.textContent = "غير متصل";
-        }
+        if (!devices.length) { dot.className = "dot off"; txt.textContent = "لا يوجد جهاز"; }
+        else if (dev && dev.online) { dot.className = "dot on"; txt.textContent = "متصل • " + dev.name; }
+        else if (dev) { dot.className = "dot off"; txt.textContent = "غير متصل • " + dev.name; }
+        else { dot.className = "dot off"; txt.textContent = "اختر جهازاً"; }
         if (resultId && s.result) {
           if (s.result.status === "error") toast("فشل التنفيذ: " + (s.result.message || ""), "err");
           else if (s.result.status === "done") toast("تم التنفيذ ✓", "ok");
@@ -238,9 +275,23 @@
       } catch (e) { /* handled in api() */ }
     }
 
-    async function send(action) {
+    const _devSel = $("#deviceSel");
+    if (_devSel) _devSel.addEventListener("change", (e) => { selectedDevice = e.target.value || null; saveDevice(); updateStatus(); });
+    const _forget = $("#forgetBtn");
+    if (_forget) _forget.addEventListener("click", async () => {
+      if (!selectedDevice) return;
+      const dev = devices.find((d) => d.id === selectedDevice);
+      if (!confirm("إزالة «" + ((dev && dev.name) || selectedDevice) + "» من القائمة؟")) return;
       try {
-        const r = await api("/api/command", { method: "POST", body: JSON.stringify({ action }) });
+        await api("/api/forget", { method: "POST", body: JSON.stringify({ deviceId: selectedDevice }) });
+        selectedDevice = null; saveDevice(); await updateStatus(); toast("تم الحذف", "ok");
+      } catch (e) {}
+    });
+
+    async function send(action) {
+      if (!selectedDevice) { toast("اختر جهازاً أولاً", "err"); return; }
+      try {
+        const r = await api("/api/command", { method: "POST", body: JSON.stringify({ action, deviceId: selectedDevice }) });
         if (r.ok) {
           toast("أُرسل الأمر: " + (ACTION_LABEL[action] || action), "ok");
           // check the result a few times
@@ -259,7 +310,7 @@
     }
 
     // wire buttons
-    document.querySelectorAll(".btn").forEach((b) => {
+    document.querySelectorAll(".btn[data-action]").forEach((b) => {
       b.addEventListener("click", () => {
         const action = b.dataset.action;
         if (b.dataset.confirm) {

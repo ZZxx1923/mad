@@ -14,6 +14,7 @@ $AgentToken = '__AGENT_TOKEN__'
 $WolMac = '__WOL_MAC__'
 $headers = @{ 'x-agent-token' = $AgentToken }
 $hostName = $env:COMPUTERNAME
+$deviceId = ($env:COMPUTERNAME -replace '[^A-Za-z0-9_-]','_')
 $logFile = Join-Path $env:LOCALAPPDATA 'RemotePCControlAgent\\agent.log'
 function Log($m){ try{ Add-Content -LiteralPath $logFile -Value ((Get-Date).ToString('s') + ' ' + $m) }catch{} }
 function Send-WOL {
@@ -34,10 +35,10 @@ $lastHb = (Get-Date).AddSeconds(-999)
 while($true){
   try{
     if((((Get-Date) - $lastHb)).TotalSeconds -ge 15){
-      Invoke-RestMethod -Uri ($ServerUrl + '/api/heartbeat') -Method Post -Headers $headers -ContentType 'application/json' -Body (@{hostname=$hostName;os='Windows'} | ConvertTo-Json) -TimeoutSec 20 | Out-Null
+      Invoke-RestMethod -Uri ($ServerUrl + '/api/heartbeat') -Method Post -Headers $headers -ContentType 'application/json' -Body (@{deviceId=$deviceId;hostname=$hostName;os='Windows'} | ConvertTo-Json) -TimeoutSec 20 | Out-Null
       $lastHb = Get-Date
     }
-    $r = Invoke-RestMethod -Uri ($ServerUrl + '/api/poll') -Method Get -Headers $headers -TimeoutSec 20
+    $r = Invoke-RestMethod -Uri ($ServerUrl + '/api/poll?deviceId=' + $deviceId) -Method Get -Headers $headers -TimeoutSec 20
     if($r.command){
       $a = $r.command.action; $id = $r.command.id; $delay = [int]$r.command.delay
       Log ('command: ' + $a)
